@@ -63,6 +63,9 @@ class t_py_generator : public t_generator {
 
     iter = parsed_options.find("dynamic");
     gen_dynamic_ = (iter != parsed_options.end());
+      
+    iter = parsed_options.find("python3");
+    gen_python3_ = (iter != parsed_options.end());
 
     if (gen_dynamic_) {
       gen_newstyle_ = 0; // dynamic is newstyle
@@ -310,6 +313,11 @@ class t_py_generator : public t_generator {
   bool gen_utf8strings_;
 
   /**
+   * True if Python 3 compatible output should be generated
+   */
+  bool gen_python3_;
+
+  /**
    * File streams
    */
 
@@ -384,9 +392,17 @@ void t_py_generator::init_generator() {
 
   f_consts_ <<
     py_autogen_comment() << endl <<
-    py_imports() << endl <<
-    "from ttypes import *" << endl <<
-    endl;
+    py_imports() << endl;
+  
+  if (!gen_python3_) {
+   f_consts_ <<
+     "from ttypes import *" << endl;
+  } else {
+    f_consts_ <<
+     "from .ttypes import *" << endl;
+  }
+  
+    f_consts_ << endl;
 }
 
 /**
@@ -802,9 +818,14 @@ void t_py_generator::generate_py_struct_definition(ofstream& out,
     // structs look pretty like dictionaries
     out <<
       indent() << "def __repr__(self):" << endl <<
-      indent() << "  L = ['%s=%r' % (key, value)" << endl <<
-      indent() << "    for key, value in self.__dict__.iteritems()]" << endl <<
-      indent() << "  return '%s(%s)' % (self.__class__.__name__, ', '.join(L))" << endl <<
+      indent() << "  L = ['%s=%r' % (key, value)" << endl;
+    if (!gen_python3_) {
+      out << indent() << "    for key, value in self.__dict__.iteritems()]" << endl;
+    } else {
+      out << indent() << "    for key, value in list(self.__dict__.items())]" << endl;
+    }
+      
+      out << indent() << "  return '%s(%s)' % (self.__class__.__name__, ', '.join(L))" << endl <<
       endl;
 
     // Equality and inequality methods that compare by value
@@ -1043,9 +1064,16 @@ void t_py_generator::generate_service(t_service* tservice) {
       "import " << get_real_py_module(tservice->get_extends()->get_program(), gen_twisted_) <<
       "." << tservice->get_extends()->get_name() << endl;
   }
-
+  
+  if (!gen_python3_) {
+    f_service_ <<
+      "from ttypes import *" << endl;
+  } else {
+    f_service_ <<
+      "from .ttypes import *" << endl;
+  }
+  
   f_service_ <<
-    "from ttypes import *" << endl <<
     "from thrift.Thrift import TProcessor" << endl <<
     render_fastbinary_includes() << endl;
 
@@ -1548,12 +1576,29 @@ void t_py_generator::generate_service_remote(t_service* tservice) {
   ofstream f_remote;
   f_remote.open(f_remote_name.c_str());
 
+  string print_cmd_begin = "print ";
+  string print_cmd_end = "";
+
+  if (gen_python3_) {
+    print_cmd_begin = "print(";
+    print_cmd_end = ")";
+  }
+
   f_remote <<
     "#!/usr/bin/env python" << endl <<
     py_autogen_comment() << endl <<
     "import sys" << endl <<
-    "import pprint" << endl <<
-    "from urlparse import urlparse" << endl <<
+    "import pprint" << endl;
+
+  if (!gen_python3_) {
+    f_remote <<
+      "from urlparse import urlparse" << endl;
+  } else {
+    f_remote <<
+        "from urllib.parse import urlparse" << endl;
+    }
+
+  f_remote <<
     "from thrift.transport import TTransport" << endl <<
     "from thrift.transport import TSocket" << endl <<
     "from thrift.transport import THttpClient" << endl <<
@@ -1567,13 +1612,22 @@ void t_py_generator::generate_service_remote(t_service* tservice) {
 
   f_remote <<
     "if len(sys.argv) <= 1 or sys.argv[1] == '--help':" << endl <<
-    "  print ''" << endl <<
-    "  print 'Usage: ' + sys.argv[0] + ' [-h host[:port]] [-u url] [-f[ramed]] function [arg1 [arg2...]]'" << endl <<
-    "  print ''" << endl <<
-    "  print 'Functions:'" << endl;
+    "  " << print_cmd_begin << "''" << print_cmd_end << endl;
+
+  if (!gen_python3_) {
+    f_remote <<
+      "  " << print_cmd_begin << "'Usage: ' + sys.argv[0] + ' [-h host[:port]] [-u url] [-f[ramed]] function [arg1 [arg2...]]'" << print_cmd_end << endl;
+  } else {
+    f_remote <<
+      "  " << print_cmd_begin << "('Usage: {0} [-h host[:port]] [-u url] [-f[ramed]] function [arg1 [arg2...]]'.format(sys.argv[0]))" << print_cmd_end << endl;
+  }
+
+  f_remote <<
+    "  " << print_cmd_begin << "''" << print_cmd_end << endl <<
+    "  " << print_cmd_begin << "'Functions:'" << print_cmd_end << endl;
   for (f_iter = functions.begin(); f_iter != functions.end(); ++f_iter) {
     f_remote <<
-      "  print '  " << (*f_iter)->get_returntype()->get_name() << " " << (*f_iter)->get_name() << "(";
+      "  " << print_cmd_begin << "'  " << (*f_iter)->get_returntype()->get_name() << " " << (*f_iter)->get_name() << "(";
     t_struct* arg_struct = (*f_iter)->get_arglist();
     const std::vector<t_field*>& args = arg_struct->get_members();
     vector<t_field*>::const_iterator a_iter;
@@ -1588,10 +1642,10 @@ void t_py_generator::generate_service_remote(t_service* tservice) {
       f_remote <<
         args[i]->get_type()->get_name() << " " << args[i]->get_name();
     }
-    f_remote << ")'" << endl;
+    f_remote << ")'" << print_cmd_end << endl;
   }
   f_remote <<
-    "  print ''" << endl <<
+    "  " << print_cmd_begin << "''" << print_cmd_end << endl <<
     "  sys.exit(0)" << endl <<
     endl;
 
@@ -1663,7 +1717,7 @@ void t_py_generator::generate_service_remote(t_service* tservice) {
     f_remote <<
       "if cmd == '" << (*f_iter)->get_name() << "':" << endl <<
       "  if len(args) != " << num_args << ":" << endl <<
-      "    print '" << (*f_iter)->get_name() << " requires " << num_args << " args'" << endl <<
+      "    " << print_cmd_begin << "'" << (*f_iter)->get_name() << " requires " << num_args << " args'" <<  print_cmd_end << endl <<
       "    sys.exit(1)" << endl <<
       "  pp.pprint(client." << (*f_iter)->get_name() << "(";
     for (int i = 0; i < num_args; ++i) {
@@ -1680,7 +1734,13 @@ void t_py_generator::generate_service_remote(t_service* tservice) {
 
   if (functions.size() > 0) {
     f_remote << "else:" << endl;
-    f_remote << "  print 'Unrecognized method %s' % cmd" << endl;
+    
+    if (!gen_python3_) {
+      f_remote << "  " << print_cmd_begin << "'Unrecognized method %s' % cmd" << print_cmd_end << endl;
+    } else {
+      f_remote << "  " << print_cmd_begin << "('Unrecognized method {0}'.format(cmd))" << print_cmd_end << endl;
+    }
+    
     f_remote << "  sys.exit(1)" << endl;
     f_remote << endl;
   }
@@ -2772,4 +2832,5 @@ THRIFT_REGISTER_GENERATOR(py, "Python",
 "    dynbase=CLS      Derive generated classes from class CLS instead of TBase.\n" \
 "    dynexc=CLS       Derive generated exceptions from CLS instead of TExceptionBase.\n" \
 "    dynimport='from foo.bar import CLS'\n" \
-"                     Add an import line to generated code to find the dynbase class.\n")
+"                     Add an import line to generated code to find the dynbase class.\n"\
+"    python3:         Generate code for python3\n")
