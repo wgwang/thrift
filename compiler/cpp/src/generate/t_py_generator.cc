@@ -2297,8 +2297,12 @@ void t_py_generator::generate_deserialize_container(ofstream &out,
 
   // For loop iterates over elements
   string i = tmp("_i");
-  indent(out) <<
-    "for " << i << " in xrange(" << size << "):" << endl;
+  if (!gen_python3_) {
+      indent(out) << "for " << i << " in xrange(" << size << "):" << endl;
+  } else {
+      indent(out) << "for " << i << " in range(" << size << "):" << endl;
+  }
+
 
     indent_up();
 
