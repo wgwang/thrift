@@ -17,7 +17,7 @@
 # under the License.
 #
 
-from io import StringIO
+from io import StringIO, BytesIO
 import logging
 import socket
 import struct
@@ -27,8 +27,7 @@ from thrift.transport.TTransport import TTransportException
 
 from tornado import gen
 from tornado import iostream
-from tornado import netutil
-
+from tornado import tcpserver
 
 class TTornadoStreamTransport(TTransport.TTransportBase):
     """a framed, buffered transport over a Tornado stream"""
@@ -37,7 +36,7 @@ class TTornadoStreamTransport(TTransport.TTransportBase):
         self.port = port
         self.is_queuing_reads = False
         self.read_queue = []
-        self.__wbuf = StringIO()
+        self.__wbuf = BytesIO()
 
         # servers provide a ready-to-go stream
         self.stream = stream
@@ -114,7 +113,7 @@ class TTornadoStreamTransport(TTransport.TTransportBase):
         wout = self.__wbuf.getvalue()
         wsz = len(wout)
         # reset wbuf before write/flush to preserve state on underlying failure
-        self.__wbuf = StringIO()
+        self.__wbuf = BytesIO()
         # N.B.: Doing this string concatenation is WAY cheaper than making
         # two separate calls to the underlying socket object. Socket writes in
         # Python turn out to be REALLY expensive, but it seems to do a pretty
@@ -125,7 +124,7 @@ class TTornadoStreamTransport(TTransport.TTransportBase):
         self.stream.write(buf, callback)
 
 
-class TTornadoServer(netutil.TCPServer):
+class TTornadoServer(tcpserver.TCPServer):
     def __init__(self, processor, iprot_factory, oprot_factory=None,
                  *args, **kwargs):
         super(TTornadoServer, self).__init__(*args, **kwargs)

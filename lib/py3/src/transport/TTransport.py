@@ -203,9 +203,9 @@ class TMemoryBuffer(TTransportBase, CReadableTransport):
     If value is set, this will be a transport for reading,
     otherwise, it is for writing"""
     if value is not None:
-      self._buffer = StringIO(value)
+      self._buffer = BytesIO(value)
     else:
-      self._buffer = StringIO()
+      self._buffer = BytesIO()
 
   def isOpen(self):
     return not self._buffer.closed
