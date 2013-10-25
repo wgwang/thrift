@@ -251,8 +251,8 @@ class TFramedTransport(TTransportBase, CReadableTransport):
 
   def __init__(self, trans,):
     self.__trans = trans
-    self.__rbuf = StringIO()
-    self.__wbuf = StringIO()
+    self.__rbuf = BytesIO()
+    self.__wbuf = BytesIO()
 
   def isOpen(self):
     return self.__trans.isOpen()
@@ -283,7 +283,7 @@ class TFramedTransport(TTransportBase, CReadableTransport):
     wout = self.__wbuf.getvalue()
     wsz = len(wout)
     # reset wbuf before write/flush to preserve state on underlying failure
-    self.__wbuf = StringIO()
+    self.__wbuf = BytesIO()
     # N.B.: Doing this string concatenation is WAY cheaper than making
     # two separate calls to the underlying socket object. Socket writes in
     # Python turn out to be REALLY expensive, but it seems to do a pretty
