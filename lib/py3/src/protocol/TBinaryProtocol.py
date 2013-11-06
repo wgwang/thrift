@@ -120,7 +120,7 @@ class TBinaryProtocol(TProtocolBase):
 
   def writeString(self, wstr):
     if isinstance(wstr, str):
-        wstr = wstr.encode('latin_1')
+        wstr = wstr.encode('utf-8')
     self.writeI32(len(wstr))
     self.trans.write(wstr)
 
@@ -223,7 +223,7 @@ class TBinaryProtocol(TProtocolBase):
     len = self.readI32()
     str = self.trans.readAll(len)
     if isinstance(str, bytes):
-        str = str.decode('latin_1')
+        str = str.decode('utf-8')
     return str
 
 
