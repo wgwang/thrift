@@ -41,7 +41,7 @@ This lib is for python3. It's inherit from lib py (path: ../py/). According to p
 
  * using 2to3 to fixing syntax error.
  * using bytes for transport, using str for others.
- * using latin_1 for codec from str to bytes, as well as bytes to str.
+ * using utf8 for codec from str to bytes, as well as bytes to str.
 
 
 
