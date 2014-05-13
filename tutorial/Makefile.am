@@ -46,6 +46,10 @@ if WITH_GO
 SUBDIRS += go
 endif
 
+if WITH_NODEJS
+SUBDIRS += nodejs
+endif
+
 #
 # generate html for ThriftTest.thrift
 #
@@ -53,8 +57,8 @@ all-local:
 	$(top_builddir)/compiler/cpp/thrift --gen html -r $(top_srcdir)/tutorial/tutorial.thrift
 endif
 
-# Any folders or files not listed above being added to SUBDIR need to be placed here in 
-# EXTRA_DIST to be included in the release 
+# Any folders or files not listed above being added to SUBDIR need to be placed here in
+# EXTRA_DIST to be included in the release
 EXTRA_DIST = \
 	csharp \
 	d \

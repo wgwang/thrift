@@ -63,7 +63,7 @@ class t_py_generator : public t_generator {
 
     iter = parsed_options.find("dynamic");
     gen_dynamic_ = (iter != parsed_options.end());
-      
+
     iter = parsed_options.find("python3");
     gen_python3_ = (iter != parsed_options.end());
 
@@ -393,7 +393,7 @@ void t_py_generator::init_generator() {
   f_consts_ <<
     py_autogen_comment() << endl <<
     py_imports() << endl;
-  
+
   if (!gen_python3_) {
    f_consts_ <<
      "from ttypes import *" << endl;
@@ -401,7 +401,7 @@ void t_py_generator::init_generator() {
     f_consts_ <<
      "from .ttypes import *" << endl;
   }
-  
+
     f_consts_ << endl;
 }
 
@@ -824,7 +824,7 @@ void t_py_generator::generate_py_struct_definition(ofstream& out,
     } else {
       out << indent() << "    for key, value in list(self.__dict__.items())]" << endl;
     }
-      
+
       out << indent() << "  return '%s(%s)' % (self.__class__.__name__, ', '.join(L))" << endl <<
       endl;
 
@@ -1064,7 +1064,7 @@ void t_py_generator::generate_service(t_service* tservice) {
       "import " << get_real_py_module(tservice->get_extends()->get_program(), gen_twisted_) <<
       "." << tservice->get_extends()->get_name() << endl;
   }
-  
+
   if (!gen_python3_) {
     f_service_ <<
       "from ttypes import *" << endl;
@@ -1072,7 +1072,7 @@ void t_py_generator::generate_service(t_service* tservice) {
     f_service_ <<
       "from .ttypes import *" << endl;
   }
-  
+
   f_service_ <<
     "from thrift.Thrift import TProcessor" << endl <<
     render_fastbinary_includes() << endl;
@@ -1612,22 +1612,13 @@ void t_py_generator::generate_service_remote(t_service* tservice) {
 
   f_remote <<
     "if len(sys.argv) <= 1 or sys.argv[1] == '--help':" << endl <<
-    "  " << print_cmd_begin << "''" << print_cmd_end << endl;
-
-  if (!gen_python3_) {
-    f_remote <<
-      "  " << print_cmd_begin << "'Usage: ' + sys.argv[0] + ' [-h host[:port]] [-u url] [-f[ramed]] function [arg1 [arg2...]]'" << print_cmd_end << endl;
-  } else {
-    f_remote <<
-      "  " << print_cmd_begin << "('Usage: {0} [-h host[:port]] [-u url] [-f[ramed]] function [arg1 [arg2...]]'.format(sys.argv[0]))" << print_cmd_end << endl;
-  }
-
-  f_remote <<
-    "  " << print_cmd_begin << "''" << print_cmd_end << endl <<
-    "  " << print_cmd_begin << "'Functions:'" << print_cmd_end << endl;
+    "  print('')" << endl <<
+    "  print('Usage: ' + sys.argv[0] + ' [-h host[:port]] [-u url] [-f[ramed]] function [arg1 [arg2...]]')" << endl <<
+    "  print('')" << endl <<
+    "  print('Functions:')" << endl;
   for (f_iter = functions.begin(); f_iter != functions.end(); ++f_iter) {
     f_remote <<
-      "  " << print_cmd_begin << "'  " << (*f_iter)->get_returntype()->get_name() << " " << (*f_iter)->get_name() << "(";
+      "  print('  " << (*f_iter)->get_returntype()->get_name() << " " << (*f_iter)->get_name() << "(";
     t_struct* arg_struct = (*f_iter)->get_arglist();
     const std::vector<t_field*>& args = arg_struct->get_members();
     vector<t_field*>::const_iterator a_iter;
@@ -1642,10 +1633,10 @@ void t_py_generator::generate_service_remote(t_service* tservice) {
       f_remote <<
         args[i]->get_type()->get_name() << " " << args[i]->get_name();
     }
-    f_remote << ")'" << print_cmd_end << endl;
+    f_remote << ")')" << endl;
   }
   f_remote <<
-    "  " << print_cmd_begin << "''" << print_cmd_end << endl <<
+    "  print('')" << endl <<
     "  sys.exit(0)" << endl <<
     endl;
 
@@ -1717,7 +1708,7 @@ void t_py_generator::generate_service_remote(t_service* tservice) {
     f_remote <<
       "if cmd == '" << (*f_iter)->get_name() << "':" << endl <<
       "  if len(args) != " << num_args << ":" << endl <<
-      "    " << print_cmd_begin << "'" << (*f_iter)->get_name() << " requires " << num_args << " args'" <<  print_cmd_end << endl <<
+      "    print('" << (*f_iter)->get_name() << " requires " << num_args << " args')" << endl <<
       "    sys.exit(1)" << endl <<
       "  pp.pprint(client." << (*f_iter)->get_name() << "(";
     for (int i = 0; i < num_args; ++i) {
@@ -1734,13 +1725,7 @@ void t_py_generator::generate_service_remote(t_service* tservice) {
 
   if (functions.size() > 0) {
     f_remote << "else:" << endl;
-    
-    if (!gen_python3_) {
-      f_remote << "  " << print_cmd_begin << "'Unrecognized method %s' % cmd" << print_cmd_end << endl;
-    } else {
-      f_remote << "  " << print_cmd_begin << "('Unrecognized method {0}'.format(cmd))" << print_cmd_end << endl;
-    }
-    
+    f_remote << "  print('Unrecognized method %s' % cmd)" << endl;
     f_remote << "  sys.exit(1)" << endl;
     f_remote << endl;
   }
@@ -1757,7 +1742,7 @@ void t_py_generator::generate_service_remote(t_service* tservice) {
           S_IRUSR
         | S_IWUSR
         | S_IXUSR
-#ifndef MINGW
+#ifndef _WIN32
         | S_IRGRP
         | S_IXGRP
         | S_IROTH

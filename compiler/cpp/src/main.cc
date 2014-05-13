@@ -39,13 +39,14 @@
 #include <errno.h>
 #include <limits.h>
 
-#ifdef MINGW
+#ifdef _WIN32
 # include <windows.h> /* for GetFullPathName */
 #endif
 
 // Careful: must include globals first for extern definitions
 #include "globals.h"
 
+#include "platform.h"
 #include "main.h"
 #include "parse/t_program.h"
 #include "parse/t_scope.h"
@@ -145,6 +146,13 @@ char* g_doctext;
  */
 int g_doctext_lineno;
 
+/** 
+ * The First doctext comment
+ */
+char* g_program_doctext_candidate;
+int  g_program_doctext_lineno = 0;
+PROGDOCTEXT_STATUS  g_program_doctext_status = INVALID;
+
 /**
  * Whether or not negative field keys are accepted.
  */
@@ -161,11 +169,11 @@ int g_allow_64bit_consts = 0;
 bool gen_recurse = false;
 
 /**
- * MinGW doesn't have realpath, so use fallback implementation in that case,
+ * Win32 doesn't have realpath, so use fallback implementation in that case,
  * otherwise this just calls through to realpath
  */
 char *saferealpath(const char *path, char *resolved_path) {
-#ifdef MINGW
+#ifdef _WIN32
   char buf[MAX_PATH];
   char* basename;
   DWORD len = GetFullPathName(path, MAX_PATH, buf, &basename);
@@ -190,7 +198,7 @@ char *saferealpath(const char *path, char *resolved_path) {
 }
 
 bool check_is_directory(const char *dir_name) {
-#ifdef MINGW
+#ifdef _WIN32
   DWORD attributes = ::GetFileAttributesA(dir_name);
   if(attributes == INVALID_FILE_ATTRIBUTES) {
     fprintf(stderr, "Output directory %s is unusable: GetLastError() = %ld\n", dir_name, GetLastError());
@@ -336,7 +344,7 @@ string include_file(string filename) {
   // Absolute path? Just try that
   if (filename[0] == '/') {
     // Realpath!
-    char rp[PATH_MAX];
+    char rp[THRIFT_PATH_MAX];
     if (saferealpath(filename.c_str(), rp) == NULL) {
       pwarning(0, "Cannot open include file %s\n", filename.c_str());
       return std::string();
@@ -358,7 +366,7 @@ string include_file(string filename) {
       string sfilename = *(it) + "/" + filename;
 
       // Realpath!
-      char rp[PATH_MAX];
+      char rp[THRIFT_PATH_MAX];
       if (saferealpath(sfilename.c_str(), rp) == NULL) {
         continue;
       }
@@ -386,6 +394,32 @@ void clear_doctext() {
   }
   free(g_doctext);
   g_doctext = NULL;
+}
+
+/**
+ * Reset program doctext information after processing a file
+ */
+void reset_program_doctext_info() {
+  if(g_program_doctext_candidate != NULL) {
+    free(g_program_doctext_candidate);
+    g_program_doctext_candidate = NULL;
+  }
+  g_program_doctext_lineno = 0;
+  g_program_doctext_status = INVALID;
+  pdebug("%s","program doctext set to INVALID");
+}
+
+/**
+ * We are sure the program doctext candidate is really the program doctext.
+ */
+void declare_valid_program_doctext() {
+  if((g_program_doctext_candidate != NULL) && (g_program_doctext_status == STILL_CANDIDATE)) {
+    g_program_doctext_status = ABSOLUTELY_SURE;  
+    pdebug("%s","program doctext set to ABSOLUTELY_SURE");
+  } else {
+    g_program_doctext_status = NO_PROGRAM_DOCTEXT;  
+    pdebug("%s","program doctext set to NO_PROGRAM_DOCTEXT");
+  }
 }
 
 /**
@@ -627,6 +661,20 @@ void generate_all_fingerprints(t_program* program) {
   */
 }
 
+
+/**
+ * Emits a warning on list<byte>, binary type is typically a much better choice.
+ */
+void check_for_list_of_bytes(t_type* list_elem_type) {
+  if((g_parse_mode == PROGRAM) && (list_elem_type != NULL) && list_elem_type->is_base_type()) {
+    t_base_type* tbase = (t_base_type*)list_elem_type;
+    if(tbase->get_base() == t_base_type::TYPE_BYTE) {
+      pwarning(1,"Consider using the more efficient \"binary\" type instead of \"list<byte>\".");
+    }
+  }
+}
+
+
 /**
  * Prints the version number
  */
@@ -666,7 +714,7 @@ void help() {
   fprintf(stderr, "                compatibility with older .thrift files)\n");
   fprintf(stderr, "  --allow-64bit-consts  Do not print warnings about using 64-bit constants\n");
   fprintf(stderr, "  --gen STR   Generate code with a dynamically-registered generator.\n");
-  fprintf(stderr, "                STR has the form language[:key1=val1[,key2,[key3=val3]]].\n");
+  fprintf(stderr, "                STR has the form language[:key1=val1[,key2[,key3=val3]]].\n");
   fprintf(stderr, "                Keys and values are options passed to the generator.\n");
   fprintf(stderr, "                Many options will not require values.\n");
   fprintf(stderr, "\n");
@@ -757,8 +805,8 @@ void validate_const_rec(std::string name, t_type* type, t_const_value* value) {
       }
     }
     if (!found) {
-      throw "type error: const " + name + " was declared as type " 
-        + type->get_name() + " which is an enum, but " 
+      throw "type error: const " + name + " was declared as type "
+        + type->get_name() + " which is an enum, but "
         + value->get_identifier() + " is not a valid value for that enum";
     }
   } else if (type->is_struct() || type->is_xception()) {
@@ -909,6 +957,9 @@ void parse(t_program* program, t_program* parent_program) {
   for (iter = includes.begin(); iter != includes.end(); ++iter) {
     parse(*iter, program);
   }
+
+  // reset program doctext status before parsing a new file
+  reset_program_doctext_info();
 
   // Parse the program file
   g_parse_mode = PROGRAM;
@@ -1066,7 +1117,7 @@ int main(int argc, char** argv) {
         }
         out_path = arg;
 
-#ifdef MINGW
+#ifdef _WIN32
         //strip out trailing \ on Windows
         int last = out_path.length()-1;
         if (out_path[last] == '\\')
@@ -1094,7 +1145,7 @@ int main(int argc, char** argv) {
   // if you're asking for version, you have a right not to pass a file
   if ((strcmp(argv[argc-1], "-version") == 0) || (strcmp(argv[argc-1], "--version") == 0)) {
     version();
-    exit(1);
+    exit(0);
   }
 
   // You gotta generate something!
@@ -1104,7 +1155,7 @@ int main(int argc, char** argv) {
   }
 
   // Real-pathify it
-  char rp[PATH_MAX];
+  char rp[THRIFT_PATH_MAX];
   if (argv[i] == NULL) {
     fprintf(stderr, "Missing file name\n");
     usage();
