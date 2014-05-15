@@ -34,10 +34,18 @@
 #include <stdint.h>
 #endif
 #include <limits.h>
+#ifdef _MSC_VER
+#include "windows/config.h"
+#endif
 #include "main.h"
 #include "globals.h"
 #include "parse/t_program.h"
 #include "parse/t_scope.h"
+
+#ifdef _MSC_VER
+//warning C4065: switch statement contains 'default' but no 'case' labels
+#pragma warning(disable:4065)
+#endif
 
 /**
  * This global variable is used for automatic numbering of field indices etc.
@@ -157,6 +165,7 @@ const int struct_is_union = 1;
 %token tok_required
 %token tok_optional
 %token tok_union
+%token tok_reference
 
 /**
  * Grammar nodes
@@ -178,6 +187,7 @@ const int struct_is_union = 1;
 %type<ttype>     TypeAnnotations
 %type<ttype>     TypeAnnotationList
 %type<tannot>    TypeAnnotation
+%type<id>        TypeAnnotationValue
 
 %type<tfield>    Field
 %type<tfieldid>  FieldIdentifier
@@ -185,6 +195,7 @@ const int struct_is_union = 1;
 %type<ttype>     FieldType
 %type<tconstv>   FieldValue
 %type<tstruct>   FieldList
+%type<tbool>     FieldReference
 
 %type<tenum>     Enum
 %type<tenum>     EnumDefList
@@ -235,12 +246,11 @@ Program:
   HeaderList DefinitionList
     {
       pdebug("Program -> Headers DefinitionList");
-      /*
-      TODO(dreiss): Decide whether full-program doctext is worth the trouble.
-      if ($1 != NULL) {
-        g_program->set_doc($1);
+      if((g_program_doctext_candidate != NULL) && (g_program_doctext_status != ALREADY_PROCESSED))
+      {
+        g_program->set_doc(g_program_doctext_candidate);
+        g_program_doctext_status = ALREADY_PROCESSED;
       }
-      */
       clear_doctext();
     }
 
@@ -282,6 +292,7 @@ Header:
 | tok_namespace tok_identifier tok_identifier
     {
       pdebug("Header -> tok_namespace tok_identifier tok_identifier");
+      declare_valid_program_doctext();  
       if (g_parse_mode == PROGRAM) {
         g_program->set_namespace($2, $3);
       }
@@ -289,6 +300,7 @@ Header:
 | tok_namespace '*' tok_identifier
     {
       pdebug("Header -> tok_namespace * tok_identifier");
+      declare_valid_program_doctext();  
       if (g_parse_mode == PROGRAM) {
         g_program->set_namespace("*", $3);
       }
@@ -298,6 +310,7 @@ Header:
     {
       pwarning(1, "'cpp_namespace' is deprecated. Use 'namespace cpp' instead");
       pdebug("Header -> tok_cpp_namespace tok_identifier");
+      declare_valid_program_doctext();  
       if (g_parse_mode == PROGRAM) {
         g_program->set_namespace("cpp", $2);
       }
@@ -305,6 +318,7 @@ Header:
 | tok_cpp_include tok_literal
     {
       pdebug("Header -> tok_cpp_include tok_literal");
+      declare_valid_program_doctext();  
       if (g_parse_mode == PROGRAM) {
         g_program->add_cpp_include($2);
       }
@@ -313,6 +327,7 @@ Header:
     {
       pwarning(1, "'php_namespace' is deprecated. Use 'namespace php' instead");
       pdebug("Header -> tok_php_namespace tok_identifier");
+      declare_valid_program_doctext();  
       if (g_parse_mode == PROGRAM) {
         g_program->set_namespace("php", $2);
       }
@@ -322,6 +337,7 @@ Header:
     {
       pwarning(1, "'py_module' is deprecated. Use 'namespace py' instead");
       pdebug("Header -> tok_py_module tok_identifier");
+      declare_valid_program_doctext();  
       if (g_parse_mode == PROGRAM) {
         g_program->set_namespace("py", $2);
       }
@@ -331,6 +347,7 @@ Header:
     {
       pwarning(1, "'perl_package' is deprecated. Use 'namespace perl' instead");
       pdebug("Header -> tok_perl_namespace tok_identifier");
+      declare_valid_program_doctext();  
       if (g_parse_mode == PROGRAM) {
         g_program->set_namespace("perl", $2);
       }
@@ -340,6 +357,7 @@ Header:
     {
       pwarning(1, "'ruby_namespace' is deprecated. Use 'namespace rb' instead");
       pdebug("Header -> tok_ruby_namespace tok_identifier");
+      declare_valid_program_doctext();  
       if (g_parse_mode == PROGRAM) {
         g_program->set_namespace("rb", $2);
       }
@@ -349,6 +367,7 @@ Header:
     {
       pwarning(1, "'smalltalk_category' is deprecated. Use 'namespace smalltalk.category' instead");
       pdebug("Header -> tok_smalltalk_category tok_st_identifier");
+      declare_valid_program_doctext();  
       if (g_parse_mode == PROGRAM) {
         g_program->set_namespace("smalltalk.category", $2);
       }
@@ -358,6 +377,7 @@ Header:
     {
       pwarning(1, "'smalltalk_prefix' is deprecated. Use 'namespace smalltalk.prefix' instead");
       pdebug("Header -> tok_smalltalk_prefix tok_identifier");
+      declare_valid_program_doctext();  
       if (g_parse_mode == PROGRAM) {
         g_program->set_namespace("smalltalk.prefix", $2);
       }
@@ -367,6 +387,7 @@ Header:
     {
       pwarning(1, "'java_package' is deprecated. Use 'namespace java' instead");
       pdebug("Header -> tok_java_package tok_identifier");
+      declare_valid_program_doctext();  
       if (g_parse_mode == PROGRAM) {
         g_program->set_namespace("java", $2);
       }
@@ -376,6 +397,7 @@ Header:
     {
       pwarning(1, "'cocoa_prefix' is deprecated. Use 'namespace cocoa' instead");
       pdebug("Header -> tok_cocoa_prefix tok_identifier");
+      declare_valid_program_doctext();  
       if (g_parse_mode == PROGRAM) {
         g_program->set_namespace("cocoa", $2);
       }
@@ -385,6 +407,7 @@ Header:
     {
       pwarning(1, "'xsd_namespace' is deprecated. Use 'namespace xsd' instead");
       pdebug("Header -> tok_xsd_namespace tok_literal");
+      declare_valid_program_doctext();  
       if (g_parse_mode == PROGRAM) {
         g_program->set_namespace("cocoa", $2);
       }
@@ -394,6 +417,7 @@ Header:
    {
      pwarning(1, "'csharp_namespace' is deprecated. Use 'namespace csharp' instead");
      pdebug("Header -> tok_csharp_namespace tok_identifier");
+     declare_valid_program_doctext();  
      if (g_parse_mode == PROGRAM) {
        g_program->set_namespace("csharp", $2);
      }
@@ -403,6 +427,7 @@ Header:
    {
      pwarning(1, "'delphi_namespace' is deprecated. Use 'namespace delphi' instead");
      pdebug("Header -> tok_delphi_namespace tok_identifier");
+     declare_valid_program_doctext();  
      if (g_parse_mode == PROGRAM) {
        g_program->set_namespace("delphi", $2);
      }
@@ -412,6 +437,7 @@ Include:
   tok_include tok_literal
     {
       pdebug("Include -> tok_include tok_literal");
+      declare_valid_program_doctext();  
       if (g_parse_mode == INCLUDES) {
         std::string path = include_file(std::string($2));
         if (!path.empty()) {
@@ -584,7 +610,7 @@ EnumDef:
         pwarning(1, "64-bit value supplied for enum %s.\n", $2);
       }
       validate_simple_identifier( $2);
-      $$ = new t_enum_value($2, $4);
+      $$ = new t_enum_value($2, static_cast<int>($4));
       if ($1 != NULL) {
         $$->set_doc($1);
       }
@@ -667,7 +693,7 @@ ConstValue:
       $$ = new t_const_value();
       $$->set_integer($1);
       if (!g_allow_64bit_consts && ($1 < INT32_MIN || $1 > INT32_MAX)) {
-        pwarning(1, "64-bit constant \"%"PRIi64"\" may not work in all languages.\n", $1);
+        pwarning(1, "64-bit constant \"%" PRIi64"\" may not work in all languages.\n", $1);
       }
     }
 | tok_dub_constant
@@ -764,7 +790,7 @@ Struct:
         delete $7;
       }
     }
-    
+
 XsdAll:
   tok_xsd_all
     {
@@ -932,35 +958,36 @@ FieldList:
     }
 
 Field:
-  CaptureDocText FieldIdentifier FieldRequiredness FieldType tok_identifier FieldValue XsdOptional XsdNillable XsdAttributes TypeAnnotations CommaOrSemicolonOptional
+  CaptureDocText FieldIdentifier FieldRequiredness FieldType FieldReference tok_identifier FieldValue XsdOptional XsdNillable XsdAttributes TypeAnnotations CommaOrSemicolonOptional
     {
       pdebug("tok_int_constant : Field -> FieldType tok_identifier");
       if ($2.auto_assigned) {
-        pwarning(1, "No field key specified for %s, resulting protocol may have conflicts or not be backwards compatible!\n", $5);
+        pwarning(1, "No field key specified for %s, resulting protocol may have conflicts or not be backwards compatible!\n", $6);
         if (g_strict >= 192) {
           yyerror("Implicit field keys are deprecated and not allowed with -strict");
           exit(1);
         }
       }
-      validate_simple_identifier($5);
-      $$ = new t_field($4, $5, $2.value);
+      validate_simple_identifier($6);
+      $$ = new t_field($4, $6, $2.value);
+      $$->set_reference($5);
       $$->set_req($3);
-      if ($6 != NULL) {
-        g_scope->resolve_const_value($6, $4);
-        validate_field_value($$, $6);
-        $$->set_value($6);
+      if ($7 != NULL) {
+        g_scope->resolve_const_value($7, $4);
+        validate_field_value($$, $7);
+        $$->set_value($7);
       }
-      $$->set_xsd_optional($7);
-      $$->set_xsd_nillable($8);
+      $$->set_xsd_optional($8);
+      $$->set_xsd_nillable($9);
       if ($1 != NULL) {
         $$->set_doc($1);
       }
-      if ($9 != NULL) {
-        $$->set_xsd_attrs($9);
-      }
       if ($10 != NULL) {
-        $$->annotations_ = $10->annotations_;
-        delete $10;
+        $$->set_xsd_attrs($10);
+      }
+      if ($11 != NULL) {
+        $$->annotations_ = $11->annotations_;
+        delete $11;
       }
     }
 
@@ -979,24 +1006,24 @@ FieldIdentifier:
              * warn if the user-specified negative value isn't what
              * thrift would have auto-assigned.
              */
-            pwarning(1, "Nonpositive field key (%"PRIi64") differs from what would be "
+            pwarning(1, "Nonpositive field key (%" PRIi64") differs from what would be "
                      "auto-assigned by thrift (%d).\n", $1, y_field_val);
           }
           /*
            * Leave $1 as-is, and update y_field_val to be one less than $1.
            * The FieldList parsing will catch any duplicate key values.
            */
-          y_field_val = $1 - 1;
-          $$.value = $1;
+          y_field_val = static_cast<int32_t>($1 - 1);
+          $$.value = static_cast<int32_t>($1);
           $$.auto_assigned = false;
         } else {
-          pwarning(1, "Nonpositive value (%"PRIi64") not allowed as a field key.\n",
+          pwarning(1, "Nonpositive value (%d) not allowed as a field key.\n",
                    $1);
           $$.value = y_field_val--;
           $$.auto_assigned = true;
         }
       } else {
-        $$.value = $1;
+        $$.value = static_cast<int32_t>($1);
         $$.auto_assigned = false;
       }
     }
@@ -1005,6 +1032,16 @@ FieldIdentifier:
       $$.value = y_field_val--;
       $$.auto_assigned = true;
     }
+
+FieldReference:
+  tok_reference
+    {
+      $$ = true;
+    }
+|
+   {
+     $$ = false;
+   }
 
 FieldRequiredness:
   tok_required
@@ -1064,8 +1101,12 @@ FieldType:
         // Lookup the identifier in the current scope
         $$ = g_scope->get_type($1);
         if ($$ == NULL) {
-          yyerror("Type \"%s\" has not been defined.", $1);
-          exit(1);
+          /*
+           * Either this type isn't yet declared, or it's never
+             declared.  Either way allow it and we'll figure it out
+             during generation.
+           */
+          $$ = new t_typedef(g_program, $1, true);
         }
       }
     }
@@ -1190,6 +1231,7 @@ ListType:
   tok_list '<' FieldType '>' CppType
     {
       pdebug("ListType -> tok_list<FieldType>");
+      check_for_list_of_bytes($3);
       $$ = new t_list($3);
       if ($5 != NULL) {
         ((t_container*)$$)->set_cpp_name(std::string($5));
@@ -1232,12 +1274,24 @@ TypeAnnotationList:
     }
 
 TypeAnnotation:
-  tok_identifier '=' tok_literal CommaOrSemicolonOptional
+  tok_identifier TypeAnnotationValue CommaOrSemicolonOptional
     {
-      pdebug("TypeAnnotation -> tok_identifier = tok_literal");
+      pdebug("TypeAnnotation -> TypeAnnotationValue");
       $$ = new t_annotation;
       $$->key = $1;
-      $$->val = $3;
+      $$->val = $2;
+    }
+
+TypeAnnotationValue:
+  '=' tok_literal
+    {
+      pdebug("TypeAnnotationValue -> = tok_literal");
+      $$ = $2;
+    }
+|
+    {
+      pdebug("TypeAnnotationValue ->");
+      $$ = strdup("1");
     }
 
 %%

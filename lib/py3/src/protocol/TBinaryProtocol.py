@@ -44,10 +44,10 @@ class TBinaryProtocol(TProtocolBase):
   def writeMessageBegin(self, name, type, seqid):
     if self.strictWrite:
       self.writeI32(TBinaryProtocol.VERSION_1 | type)
-      self.writeString(name)
+      self.writeString(name.encode('utf-8'))
       self.writeI32(seqid)
     else:
-      self.writeString(name)
+      self.writeString(name.encode('utf-8'))
       self.writeByte(type)
       self.writeI32(seqid)
 
@@ -119,8 +119,6 @@ class TBinaryProtocol(TProtocolBase):
     self.trans.write(buff)
 
   def writeString(self, wstr):
-    if isinstance(wstr, str):
-        wstr = wstr.encode('utf-8')
     self.writeI32(len(wstr))
     self.trans.write(wstr)
 
@@ -133,7 +131,7 @@ class TBinaryProtocol(TProtocolBase):
           type=TProtocolException.BAD_VERSION,
           message='Bad version in readMessageBegin: %d' % (sz))
       type = sz & TBinaryProtocol.TYPE_MASK
-      name = self.readString()
+      name = self.readString().decode('utf-8')
       seqid = self.readI32()
     else:
       if self.strictRead:
@@ -222,8 +220,6 @@ class TBinaryProtocol(TProtocolBase):
   def readString(self):
     len = self.readI32()
     str = self.trans.readAll(len)
-    if isinstance(str, bytes):
-        str = str.decode('utf-8')
     return str
 
 
